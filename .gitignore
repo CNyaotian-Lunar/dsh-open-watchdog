@@ -1,0 +1,27 @@
+# 依赖 / dependencies
+node_modules/
+
+# 构建与运行产物 / build & runtime artifacts
+out/
+dist/
+*.log
+
+# 运行时探针日志（本机数据，绝不入库）/ probe logs (local data — never commit)
+*.jsonl
+logs/
+switch-log.jsonl
+
+# 备份文件 / backups
+*.bak
+*.bak-*
+*.orig
+
+# 编辑器 / editors
+.vscode/
+.idea/
+*.swp
+
+# 操作系统 / OS
+Thumbs.db
+Desktop.ini
+.DS_Store

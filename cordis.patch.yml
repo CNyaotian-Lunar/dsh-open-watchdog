@@ -1,0 +1,9 @@
+# dsh-open-watchdog 包层补丁
+#
+# 把插件的 Host 半边挂上；浏览器半边由 package.json 的 `dsh.client` 声明
+# 自动进入浏览器插件图。
+#
+# ⚠️ bundle 列表是**启动时**读取的 ⇒ 装完必须重启 `dsh web`。
+- insert:
+    - id: open-watchdog
+      name: 'dsh-open-watchdog'

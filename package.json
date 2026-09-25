@@ -1,0 +1,47 @@
+{
+  "name": "dsh-open-watchdog",
+  "version": "0.2.0",
+  "description": "DSH web plugin: a read-only session-switch probe — records the real timeline of switching sessions (discloses one monkey-patch of ClientAssistantStream.prototype.replace). / DSH 网页插件：只读切会话探针 —— 记录切换会话的真实时间线（已披露一处对 ClientAssistantStream.prototype.replace 的 monkey-patch）。",
+  "type": "module",
+  "main": "lib/index.mjs",
+  "exports": {
+    ".": "./lib/index.mjs",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [],
+      "platform": "web"
+    }
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "probe",
+    "diagnostics",
+    "watchdog"
+  ],
+  "license": "MIT",
+  "author": "CNyaotian-Lunar <333534611+CNyaotian-Lunar@users.noreply.github.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CNyaotian-Lunar/dsh-open-watchdog.git"
+  },
+  "homepage": "https://github.com/CNyaotian-Lunar/dsh-open-watchdog#readme",
+  "bugs": {
+    "url": "https://github.com/CNyaotian-Lunar/dsh-open-watchdog/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
