@@ -32,7 +32,7 @@
 | `timeline` | 关键事件序列（如 `loading:载入历史` / `visibility:visible`）/ key events |
 | `verdict` | 一句话结论（例如「加载文案在 50 ms 后消失」）/ a one-line verdict |
 | `type: "open-promise"` | 另有一类记录：`open()` 那个 promise 最终是 `resolved` 还是 `rejected`（**这是抓"真实抛的是什么异常"的通路**）/ a second record kind: whether the `open()` promise ended `resolved` or `rejected` |
-| `type: "replace-failed"` | 第三类：会话历史展开失败时，记录**病因 + 出错记录的"形状 dump"**（键 / 描述符标志 / 原型 / 原生构造器串）/ a third kind: when stream expansion fails, records the **cause plus a "shape dump"** of the offending record |
+| `type: "replace-failed"` | ⚠️ **当前版本不会产生这条记录**（原因见「只读承诺」节：钩子已预留，但没有调用点）。启用后它会在会话历史展开失败时记录**病因 + 出错记录的"形状 dump"**（键 / 描述符标志 / 原型 / 原生构造器串）/ ⚠️ **not produced in the current version** (see the read-only promise section: the hook exists but has no call site). When enabled, it records the **cause plus a "shape dump"** of the offending record when stream expansion fails |
 
 ---
 
@@ -90,12 +90,14 @@ GET /dsh-open-watchdog/log?n=200  # 最近 200 条（上限 500）/ latest 200 (
 - 发起**非记录类**请求（它只往 `/dsh-open-watchdog/log` POST 自己的记录）；
 - 吞掉会让宿主受损的异常（所有回调都包了 `try/catch`，失败只会少一条记录）。
 
-⚠️ **一处例外（已披露）**：为了记录"会话历史展开失败"的现场，`installReplaceHook()` 会**原地包装**
-`ClientAssistantStream.prototype.replace` —— 这是**一次 monkey-patch**（行为等价：调用原方法后**原样 rethrow**，
-不吞异常、不改返回值；但确实会改变该方法的 `function.name` / `length`，也可能干扰其它插件的同类钩子）。
-**不接受的话，删掉 `installReplaceHook(...)` 的调用即可**（只损失该项诊断能力，其余功能不受影响）。
+⚠️ **更正（2026-09-27）：其实一处例外也没有。** 代码里**预留**了一个可选钩子 `installReplaceHook()` ——
+**被调用时**它会**原地包装** `ClientAssistantStream.prototype.replace`（一次真正的 monkey-patch：行为等价、
+调用原方法后**原样 rethrow**、不吞异常、不改返回值；但会改变该方法的 `function.name` / `length`，
+也可能干扰其它插件的同类钩子）—— 但**当前版本没有任何调用点** ⇒ 它**不会发生**，
+第三类 `replace-failed` 记录**也不会产生**。这处「文档比实现更吓人」的不一致由本仓自己的审查发现并在此更正；
+要启用须自行加调用，且该路径**未经安全审查**。
 
-**English:** This plugin **never**: clicks buttons or mutates the DOM; writes `openState` / `openError` / any session state; makes **non-recording** requests; swallows exceptions that could damage the host. ⚠️ **One disclosed exception:** to capture the scene when expanding a session's history fails, `installReplaceHook()` **wraps in place** `ClientAssistantStream.prototype.replace` — **a monkey-patch** (behaviour-equivalent: calls the original and **re-throws as-is**; but it does change that method's `function.name` / `length`, and may interfere with other plugins' hooks). **Delete the `installReplaceHook(...)` call if you do not accept this** — you only lose that one diagnostic.
+**English:** This plugin **never**: clicks buttons or mutates the DOM; writes `openState` / `openError` / any session state; makes **non-recording** requests; swallows exceptions that could damage the host. ⚠️ **Correction (2026-09-27): there is no exception at all.** The code ships an optional hook, `installReplaceHook()` — *if called*, it wraps `ClientAssistantStream.prototype.replace` in place (a real monkey-patch: behaviour-equivalent, calls the original and **re-throws as-is**, but it does change that method's `function.name` / `length` and may interfere with other plugins' hooks) — **but the current version has no call site**, so it **never runs** and the third record kind, `replace-failed`, **is never produced**. We found this "docs scarier than the implementation" mismatch in our own review and are correcting it here; enabling it requires adding the call yourself, and that path has **not** been security-reviewed.
 
 ⚠️ **它用的全是浏览器自带的只读观察器**：`MutationObserver`（DOM 变化）+ `PerformanceObserver`（网络采样）。**不用定时器轮询判断状态变化** —— 因为后台标签页的定时器会被降频，那会让测量结果失真。
 **English:** ⚠️ It relies only on the browser's built-in read-only observers: `MutationObserver` (DOM changes) + `PerformanceObserver` (network sampling). It deliberately **does not use timer polling to detect state changes**, because timers in background tabs get throttled and that would distort the measurements.
