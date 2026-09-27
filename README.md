@@ -111,10 +111,42 @@ GET /dsh-open-watchdog/log?n=200  # 最近 200 条（上限 500）/ latest 200 (
 
 | 闸 / Gate | 规则 / Rule |
 |---|---|
-| 对端 / Peer | 只接受 **loopback**（`127.0.0.1` / `::1` / `::ffff:127.0.0.1`）⇒ 非本机一律 **403** |
-| Host 头 | 必须指向 loopback（**防 DNS rebinding**：攻击域解析到 127.0.0.1 后 Host 仍是 `evil.com`）⇒ **403** |
-| Origin | 缺失，或与 Host 同源才放行（**堵 CSRF 跨域写**：`text/plain` POST 属 simple request、不触发预检）⇒ 跨域 **403** |
+| 对端 / Peer | 只接受 **loopback**（`127.0.0.1` / `::1` / `::ffff:127.0.0.1`），**或** `DSH_OPEN_WATCHDOG_ALLOW_PEERS` 白名单里的精确 IP / CIDR ⇒ 其余 **403** |
+| Host 头 | 必须指向 loopback，**或** `DSH_OPEN_WATCHDOG_ALLOW_HOSTS` 白名单里**精确**命中（**防 DNS rebinding**：攻击域解析到 127.0.0.1 后 Host 仍是 `evil.com`）⇒ 其余 **403** |
+| Origin | 缺失，或**与 Host 同源**才放行（**堵 CSRF 跨域写**：`text/plain` POST 属 simple request、不触发预检）⇒ 跨域 **403** |
 | Content-Type | POST 必须 `application/json` ⇒ 其它 **415** |
+
+#### 🚪 跨机部署：`allowHosts` / `allowPeers` 开关（**默认关闭 = 只允许本机**）
+
+**两个开关默认都是空的 ⇒ 行为与上表完全一致，安全默认不变。**
+
+当**浏览器不在宿主那台机器上**时（例：宿主 Linux、浏览器在另一台 macOS，经 LAN / Tailscale 访问 `http://10.0.0.5:3080`），
+四道闸会把请求**全部 403**，而浏览器侧的写失败是 `.catch(() => void 0)` **静默吞掉**的
+⇒ 现象是「**插件装好了、路由也注册了，但一条记录都没有**」。（`2286721642` 在 Discussion #7802 的实测反馈。）
+
+| 解法 / Fix | 做法 / How | 适用 / When |
+|---|---|---|
+| **A. 白名单开关** | 宿主上设两个环境变量：<br>`DSH_OPEN_WATCHDOG_ALLOW_HOSTS="10.0.0.5,10.0.0.5:3080"`<br>`DSH_OPEN_WATCHDOG_ALLOW_PEERS="10.0.0.0/24"` | 长期使用、想省事 |
+| **B. 本地转发** | `ssh -N -L 3080:127.0.0.1:3080 <host>`，浏览器改访问 `http://127.0.0.1:3080` | 临时抓现场（**四闸全过，且不需要放宽任何闸门**） |
+
+**开关语义 / Semantics**：
+
+- `DSH_OPEN_WATCHDOG_ALLOW_HOSTS` = **Host 头白名单**，**精确**匹配，可带端口（`10.0.0.5` 与 `10.0.0.5:3080` 都算命中）；
+- `DSH_OPEN_WATCHDOG_ALLOW_PEERS` = **来源白名单**，精确 IP 或 **CIDR**（如 `10.0.0.0/24`、`192.168.0.0/16`；**换成你自己的网段**）；
+- ⚠️ **两个都要设**：只设一个 ⇒ 另一个闸门仍会 403（这正是"默认坚挺本机"的体现）；
+- ⚠️ 这是**显式放宽**、不是关闸：**白名单之外仍然 403**；
+- ⚠️ 白名单内的来源**可以带任意被允许的 Host** ⇒ 白名单要按"这个网段我信得过"来给，**别给整段公网**。
+
+**English:** Both whitelists are **empty by default ⇒ loopback only** (identical to the table above; the safe default is unchanged). When the browser runs on a **different machine** than the host (e.g. Linux host + macOS browser over LAN/Tailscale at `http://10.0.0.5:3080`), all four gates return **403** and the browser-side failure is **silently swallowed** by `.catch(() => void 0)` — the symptom is "**installed, route registered, but zero records**" (field report by `2286721642` in Discussion #7802). Two fixes: **(A)** set `DSH_OPEN_WATCHDOG_ALLOW_HOSTS` (exact Host match, port optional) **and** `DSH_OPEN_WATCHDOG_ALLOW_PEERS` (exact IP or **CIDR**) on the host; **(B)** use an SSH local forward (`ssh -N -L 3080:127.0.0.1:3080 <host>`) and browse `http://127.0.0.1:3080` — all four gates pass without relaxing anything. ⚠️ **You must set both** — setting only one leaves the other gate returning 403 (that is "loopback by default" working as intended). ⚠️ This is an **explicit widening, not a bypass**: everything outside the whitelist still gets **403**. ⚠️ A whitelisted peer may present any allowed Host, so scope the whitelist to a network you trust — **never a whole public range**.
+
+#### ⚠️ v2.4 起第③道闸更严了（手工测试时注意）
+
+第③道闸改为 **完整同源**判定（**协议 + 主机 + 端口**）。红队用 90 格矩阵实测：旧 → 新有 **14 格从「放行」变成「拒绝」，无一格变松**，
+且全部是 **loopback 别名混用**（`Host: 127.0.0.1` + `Origin: http://localhost` 这类）—— **真实浏览器不会产生这种不一致**，实际代价 ≈ 0。
+但如果你**手工用 curl 测**，请把 `Origin` 的 host 与 `Host` 头写成**同一个字面**（`127.0.0.1` 就都写 `127.0.0.1`）。
+另外：**`https://` 的 Origin 现在一律拒**（DSH 的 `webServer` 不带 TLS ⇒ 本服务永远是 `http:`）；**`Origin: null` 也一律拒**（`<iframe sandbox>` / `data:` / `file:` 不携带任何来源信息）。
+
+**English:** Since v2.4 gate ③ enforces **full same-origin** (scheme + host + port). A red-team 90-cell matrix measured **14 cells going from allow → deny, none the other way**, all of them **loopback-alias mismatches** (`Host: 127.0.0.1` + `Origin: http://localhost`) that a real browser never produces — so the practical cost is ≈ 0. If you test by hand with curl, spell the `Origin` host **exactly like** the `Host` header. Also: an **`https://` Origin is now always rejected** (DSH's `webServer` has no TLS, so this service is always `http:`), and so is **`Origin: null`** (`<iframe sandbox>` / `data:` / `file:` carry no origin information).
 
 另外 / Also：写入侧**逐行 `JSON.parse` 校验后再重新序列化** ⇒ **无法用一次 POST 注入多条伪造记录**（否则这份证据就失去可信度）；
 单条按**字节**限长、日志总量上限 **32 MB** 后**轮转**、按对端**限速**（超限 **429**）；GET **只读文件尾部**且 `n` 夹紧到 **500**；错误响应**不回传绝对路径**。
@@ -171,6 +203,22 @@ GET /dsh-open-watchdog/log?n=200  # 最近 200 条（上限 500）/ latest 200 (
   **English:** Observation caps at 25 s (`OBSERVE_MAX_MS`), then it wraps up.
 - **`throttledLikely: true` 的那组数字不要直接当"卡了 X 秒"**。
   **English:** When `throttledLikely: true`, do not read the numbers as "it hung for X seconds".
+- 🩸 **重启 `dsh web` 之后有一段冷启动窗口**：`2286721642` 的实测里，刚重启后 `/api/*` **全线 15–25 秒**
+  （`/api/session/modelCatalog` 25.5 s、`/api/commandcode/report` 21.5 s、`/api/skills/list` 14.9 s …）
+  ⇒ **这个窗口里点会话必然长卡 25 s+**，且 `openState` 会真的停在 `loading` / `pending`。
+  ⚠️ 这是**独立现象**，会与本题的「永久卡住」在体感上混在一起 ⇒ **重启后稍等一会儿再点会话**。
+  **English:** 🩸 **There is a cold-start window right after restarting `dsh web`**: in `2286721642`'s measurements every `/api/*` call took **15–25 s** (`/api/session/modelCatalog` 25.5 s, …) ⇒ clicking a session during that window always stalls 25 s+ with `openState` genuinely stuck at `loading` / `pending`. This is an **independent effect** that feels like the permanent hang this probe targets — **wait a bit after a restart before clicking**.
+- **判定范围**：v2.3 起，加载文案的检测范围**优先按 `[data-conversation-session]` 锁定被点击的那条会话**
+  （真机实测该属性的值**就是 session key**，形如 `session-<uuid>`），锁定不到再走候选链
+  `[data-conversation-content]` → `[data-slot="main.conversation"]` → `[data-chat-flow]` → `body`；实际用了哪个记在 `regionUsed` 里。
+  ⚠️ **DSH 的类名是 CSS Modules 哈希**（`OMoRSG_main` 这种，**每次构建都会变**）⇒ **绝不能用 class 当选择器**。
+  ⚠️ 早期版本用过 `[data-dsh-center-col]` —— **那其实不是 DSH 的属性**，是第三方插件 `dsh-better-sidebar` 写的 ⇒ 已移除。
+  **English:** Since v2.3 the loading-text check **first pins the clicked conversation via `[data-conversation-session]`** (its value **is** the session key, `session-<uuid>` — verified on a live page), and only then falls back along `[data-conversation-content]` → `[data-slot="main.conversation"]` → `[data-chat-flow]` → `body`; whichever was used is recorded in `regionUsed`. ⚠️ **DSH class names are CSS-Modules hashes** (e.g. `OMoRSG_main`) that **change on every build** ⇒ **never use them as selectors**. ⚠️ An earlier version used `[data-dsh-center-col]` — that is **not a DSH attribute** (it comes from the third-party plugin `dsh-better-sidebar`) ⇒ removed.
+- **payload 版本 `ver: 3`** 新增字段：`regionUsed` · `mainTextLen` · `openStateAtEnd` · `openPendingAtEnd` · `openErrorAtEnd`；
+  `verdict` 在"文案到窗口结束仍可见"时**不再直接判卡住**，而是先看 `openState` 终态再给结论。
+  ⚠️ **`ver` 是「按记录类型」的版本号**，不是全局版本：采样记录是 `ver: 3`，
+  而 `open-promise` / `replace-failed` / `dump` 这几种记录**仍然是 `ver: 2`** —— 解析时请**按记录类型**判断。
+  **English:** Payload **`ver: 3`** adds `regionUsed`, `mainTextLen`, `openStateAtEnd`, `openPendingAtEnd`, `openErrorAtEnd`. When the loading text is still visible at the end of the window, `verdict` no longer calls it a hang outright — it consults the final `openState` first. ⚠️ **`ver` is a per-record-type version, not a global one**: the sample record is `ver: 3`, while `open-promise` / `replace-failed` / `dump` records are **still `ver: 2`** — branch on the record type when parsing.
 
 ---
 
