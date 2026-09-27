@@ -226,7 +226,7 @@ GET /dsh-open-watchdog/log?n=200  # 最近 200 条（上限 500）/ latest 200 (
 
 | 版本 / commit | 日期 | 内容 |
 |---|---|---|
-| **本轮**（`c15c9fb`） | 2026-09-27 | ⭐ **跨机白名单开关** `DSH_OPEN_WATCHDOG_ALLOW_HOSTS` / `..._ALLOW_PEERS`（**默认都是空 = 只允许 loopback**）· 加载文案判定范围收窄到会话区 · verdict 纳入 `openState`/`openError` 终态（payload `ver: 3`）· **四道闸按独立红队审查加固** |
+| **v0.3.0**（`811c739`） | 2026-09-27 | ⭐ **跨机白名单开关** `DSH_OPEN_WATCHDOG_ALLOW_HOSTS` / `..._ALLOW_PEERS`（**默认都是空 = 只允许 loopback**）· 加载文案判定范围收窄到会话区 · verdict 纳入 `openState`/`openError` 终态（payload `ver: 3`）· **四道闸按独立红队审查加固**（客户端版本标记 `__watchdog_version` 同步升到 `3`）|
 | v0.2.0（`f628c71`） | 2026-09-26 | 安全加固：四道闸 + 按对端限速 + 容量上限/轮转 + 写入侧逐行校验；README 更正「`installReplaceHook` 当前无调用点」 |
 | 首发（`48bf3ae`） | 2026-09-25 | 只读探针首版 |
 

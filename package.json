@@ -1,6 +1,6 @@
 {
   "name": "dsh-open-watchdog",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "DSH web plugin: a read-only session-switch probe — records the real timeline of switching sessions (discloses one monkey-patch of ClientAssistantStream.prototype.replace). / DSH 网页插件：只读切会话探针 —— 记录切换会话的真实时间线（已披露一处对 ClientAssistantStream.prototype.replace 的 monkey-patch）。",
   "type": "module",
   "main": "lib/index.mjs",
