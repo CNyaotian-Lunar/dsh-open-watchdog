@@ -141,7 +141,7 @@ GET /dsh-open-watchdog/log?n=200  # 最近 200 条（上限 500）/ latest 200 (
 
 #### ⚠️ v2.4 起第③道闸更严了（手工测试时注意）
 
-第③道闸改为 **完整同源**判定（**协议 + 主机 + 端口**）。红队用 90 格矩阵实测：旧 → 新有 **14 格从「放行」变成「拒绝」，无一格变松**，
+第③道闸改为 **完整同源**判定（**协议 + 主机 + 端口**）。独立审查用 90 格矩阵实测：旧 → 新有 **14 格从「放行」变成「拒绝」，无一格变松**，
 且全部是 **loopback 别名混用**（`Host: 127.0.0.1` + `Origin: http://localhost` 这类）—— **真实浏览器不会产生这种不一致**，实际代价 ≈ 0。
 但如果你**手工用 curl 测**，请把 `Origin` 的 host 与 `Host` 头写成**同一个字面**（`127.0.0.1` 就都写 `127.0.0.1`）。
 另外：**`https://` 的 Origin 现在一律拒**（DSH 的 `webServer` 不带 TLS ⇒ 本服务永远是 `http:`）；**`Origin: null` 也一律拒**（`<iframe sandbox>` / `data:` / `file:` 不携带任何来源信息）。
@@ -226,22 +226,22 @@ GET /dsh-open-watchdog/log?n=200  # 最近 200 条（上限 500）/ latest 200 (
 
 | 版本 / commit | 日期 | 内容 |
 |---|---|---|
-| **v0.3.0**（`811c739`） | 2026-09-27 | ⭐ **跨机白名单开关** `DSH_OPEN_WATCHDOG_ALLOW_HOSTS` / `..._ALLOW_PEERS`（**默认都是空 = 只允许 loopback**）· 加载文案判定范围收窄到会话区 · verdict 纳入 `openState`/`openError` 终态（payload `ver: 3`）· **四道闸按独立红队审查加固**（客户端版本标记 `__watchdog_version` 同步升到 `3`）|
+| **v0.3.0**（`811c739`） | 2026-09-27 | ⭐ **跨机白名单开关** `DSH_OPEN_WATCHDOG_ALLOW_HOSTS` / `..._ALLOW_PEERS`（**默认都是空 = 只允许 loopback**）· 加载文案判定范围收窄到会话区 · verdict 纳入 `openState`/`openError` 终态（payload `ver: 3`）· **四道闸按独立审查加固**（客户端版本标记 `__watchdog_version` 同步升到 `3`）|
 | v0.2.0（`f628c71`） | 2026-09-26 | 安全加固：四道闸 + 按对端限速 + 容量上限/轮转 + 写入侧逐行校验；README 更正「`installReplaceHook` 当前无调用点」 |
 | 首发（`48bf3ae`） | 2026-09-25 | 只读探针首版 |
 
-**本轮修掉的 6 个缺陷 —— 全部由独立红队发现（我方 20 条自测全绿之后）**：
+**本轮修掉的 6 个缺陷 —— 全部由独立审查发现（我方 20 条自测全绿之后）**：
 
 1. 🩸 `ALLOW_PEERS='10.0.0.0/'`（掩码位写空）被 `Number('') === 0` 当成 `/0` ⇒ **放行整个 IPv4 空间**（实测公网 peer 也拿到 200）；
 2. 🩸 「同源」**只比 hostname** ⇒ 同机另一个端口（异源）可让记录被伪造落盘；`Origin: null`（`<iframe sandbox>`）**四道闸全过**；
 3. `Host: 10.0.0.5:3080@evil.com`、`10.0.0.5:3080:evil.com` ⇒ 能被切出"裸主机名"而命中白名单；
 4. `Content-Type: text/plain; application/json` 因用 `includes` 而通过 —— 它的 MIME essence 是 `text/plain`，属 **CORS 简单请求（不触发预检）**，是 CSRF 能一键利用的使能条件；
 5. 🩸 **IPv6 `[::1]` 同源被静默 403** —— `URL.hostname` 自带方括号而 Host 侧被剥掉，两侧归一化不对称；
-6. 🩸 **`openStates` 有 60 条上限（`PUSH_CAP`）** ⇒ verdict 的"终态"可能已被挤出数组 ⇒ **把已经恢复的会话报成"真卡"**（红队归因实验：只把 cap 改成 200 结论就翻转，而 `pollCount` 相同）。
+6. 🩸 **`openStates` 有 60 条上限（`PUSH_CAP`）** ⇒ verdict 的"终态"可能已被挤出数组 ⇒ **把已经恢复的会话报成"真卡"**（独立审查归因实验：只把 cap 改成 200 结论就翻转，而 `pollCount` 相同）。
 
 **回归测试**（已把上面每一条固化成用例）：`test-gates.mjs`（默认模式 10 + 白名单模式 10）+ `test-regression.mjs`（normal 12 + broken 3）= **35 断言全绿**。
 
-> ⚠️ **尚未验证的部分（如实声明）**：`lib/client.js` 的改动**没有真机端到端验证**（只有桩 DOM 测试 + 源码形状断言）；缺陷 6 的修法（终态实时读一次）也**没有真机复现来验** —— 红队的归因实验是改 `PUSH_CAP` 做的，不是验这个写法。
+> ⚠️ **尚未验证的部分（如实声明）**：`lib/client.js` 的改动**没有真机端到端验证**（只有桩 DOM 测试 + 源码形状断言）；缺陷 6 的修法（终态实时读一次）也**没有真机复现来验** —— 独立审查的归因实验是改 `PUSH_CAP` 做的，不是验这个写法。
 
 **English:** This round adds the two opt-in whitelist env vars (**both empty by default ⇒ loopback only**), narrows the loading-text check to the conversation region, feeds `openState`/`openError` into the verdict (`ver: 3`), and hardens all four gates after an **independent red-team review**. Six defects were found by that review **after** our own 20 assertions were green: (1) an empty CIDR prefix (`'10.0.0.0/'`) silently became `/0` and **allowed the whole IPv4 space**; (2) "same-origin" compared **only the hostname**, letting a different-port page forge records, and `Origin: null` passed all four gates; (3) `@userinfo` / double-colon `Host` values could match the whitelist; (4) `Content-Type: text/plain; application/json` slipped through `includes` — its MIME essence makes it a **CORS-simple (preflight-free) request**, the enabler for one-click CSRF; (5) **IPv6 `[::1]` same-origin was silently 403'd** because the two sides normalised brackets differently; (6) `openStates` is capped at 60 (`PUSH_CAP`), so the verdict's "final state" could be evicted and **report a recovered session as hung**. All six are now regression cases (**35 assertions green**). ⚠️ **Not yet verified**: the `lib/client.js` changes have **no end-to-end run on a real page** (stub-DOM tests + source-shape assertions only), and fix (6) has no live reproduction — the red team's attribution experiment changed `PUSH_CAP`, which is not the same as testing this implementation.
 
