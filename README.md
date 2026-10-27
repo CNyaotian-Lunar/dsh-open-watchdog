@@ -168,11 +168,10 @@ GET /dsh-open-watchdog/log?n=200  # 最近 200 条（上限 500）/ latest 200 (
 | 项 / Item | 作者的实测环境 / Author's tested environment |
 |---|---|
 | DSH | `0.1.7-rc.2` |
-| 操作系统 / OS | Windows 11 家庭版（build 26200） |
+| 操作系统 / OS | Windows 11 |
 | 浏览器 / Browser | **Firefox**（Chrome / Edge 未专门验证 / not specifically verified） |
-| Node | `v24.20.0` |
+| Node | `v24.x` |
 | 安装形态 / Install layout | 自定义安装根 + profile 在 `~/.dsh/profiles/web` |
-| 端口 / Port | 12073（与插件无关，仅说明作者环境 / irrelevant, context only） |
 
 ⇒ **装之前建议先确认**：① DSH 版本接近；② 你的插件加载机制和上面一致；③ 装完看宿主日志有没有 `[dsh-open-watchdog] 路由已注册` —— **没看到就说明路由没挂上，记录会 POST 失败**。
 **English:** Before installing, check: ① a close DSH version; ② your plugin-loading mechanism matches the above; ③ after installing, look for `[dsh-open-watchdog] 路由已注册` in the host log — **if it is missing, the route never registered and records will fail to POST**.
